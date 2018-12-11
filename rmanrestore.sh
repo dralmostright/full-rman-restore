@@ -22,7 +22,7 @@ bell=$(tput bel)
 underline=$(tput smul)
 
 ###
-### Handling error while running error
+### Handling error while running script
 ###
 ### $1 : Error Code
 ### $2 : Error message in detail
@@ -30,7 +30,7 @@ underline=$(tput smul)
 
 ReportError(){
        echo "########################################################"
-       echo "Error during Running Scripts"
+       echo "Error during Running Script : $CURSCRIPT"
        echo "$1: $2"
        echo "########################################################"
        exit 1;

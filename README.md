@@ -4,4 +4,6 @@ This shell script helps a naive user to full restore an Oracle Database with muc
 * On different host
 * To different location 
 
+![Alt text](images/error-1.png?raw=true "Snapshot showing error for Fundamental variables.")
+
 ### Still in Development........
