@@ -12,6 +12,8 @@ ORACLE_OWNER=""
 RESTORE_USER=`whoami`
 BACKUP_DIR=""
 CURSCRIPT=`realpath $0`
+ORACLE_VERSION=""
+ORASPFILE_PATH=""
 
 ##
 ## For Warning and Text manupulation
@@ -49,6 +51,17 @@ ReportInfo(){
        echo "########################################################"
 }
 
+###
+### Verify if directory exists
+###
+
+VerifyDirectory(){
+        if [ ! -d ${1} ]
+        then
+		ReportInfo "Verifying file and directory $1"
+                ReportError "RERR-002" "Directory \"${bell}${bold}${underline}${1}${reset}\" not found or invalid. Aborting...."
+	fi
+}
 
 ###
 ### FUNCTION TO CHECK FUNDAMENTAL VARIABLES
@@ -96,3 +109,19 @@ sleep 1;
 ### Check fundamental vars..
 ###
 CheckVars $ORACLE_HOME $RESTORE_USER
+
+###
+### Report user whats going on..
+###
+ReportInfo "Checking Fundamental Variables..... passed."
+echo "";
+sleep 1;
+
+###
+### Restore pfile / Spfile
+###
+
+printf 'Please provide Full path for spfile backup location : '
+read -r ORASPFILE_PATH
+
+VerifyDirectory $ORASPFILE_PATH
