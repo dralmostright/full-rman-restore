@@ -1,0 +1,24 @@
+
+Recovery Manager: Release 11.2.0.4.0 - Production on Thu Dec 13 23:05:32 2018
+
+Copyright (c) 1982, 2011, Oracle and/or its affiliates.  All rights reserved.
+
+connected to target database: OGGSRC (not mounted)
+using target database control file instead of recovery catalog
+
+RMAN> 2> 3> 4> 5> 
+executing command: SET DBID
+
+Starting restore at 13-DEC-18
+allocated channel: ORA_DISK_1
+channel ORA_DISK_1: SID=134 device type=DISK
+
+channel ORA_DISK_1: restoring control file
+channel ORA_DISK_1: restore complete, elapsed time: 00:00:01
+output file name=/home/oracle/DBHC/full-rman-restore/control_testogg_01.ctl
+output file name=/home/oracle/DBHC/full-rman-restore/control_testogg_02.ctl
+Finished restore at 13-DEC-18
+
+RMAN> 
+
+Recovery Manager complete.
