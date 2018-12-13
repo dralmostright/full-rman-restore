@@ -5,7 +5,7 @@
 ###
 
 ORACLE_HOME="/u01/app/oracle/product/11.2.0/dbhome_1"
-ORACLE_SID=""
+ORACLE_SID="testogg"
 ORACLE_UNQNAME=""
 ORACLE_HOST=""
 ORACLE_OWNER=""
@@ -14,6 +14,11 @@ BACKUP_DIR=""
 CURSCRIPT=`realpath $0`
 ORACLE_VERSION=""
 ORASPFILE_PATH=""
+ORACLE_DBID="506461997"
+DATE_AND_TIME=`date +%d_%m_%Y`
+LOG_FILE_NAME=`dirname ${CURSCRIPT}`/Sessionrestore_${DATE_AND_TIME}.log
+
+
 
 ##
 ## For Warning and Text manupulation
@@ -33,7 +38,7 @@ underline=$(tput smul)
 ReportError(){
        echo "########################################################"
        echo "Error during Running Script : $CURSCRIPT"
-       echo "$1: $2"
+       echo -e "$1: $2"
        echo "########################################################"
        exit 1;
 }
@@ -51,16 +56,69 @@ ReportInfo(){
        echo "########################################################"
 }
 
+
+###
+### Count occurance of error words in a file and stop execution if threshold is reached..
+###
+
+VerifyError(){
+errorCount=`cat ${1}|grep -i ${2}|wc -l`
+if test $errorCount -gt ${3}
+then
+        ReportError  "RERR-${4}" "Some error occured. ${5} \nPlease review "${bell}${bold}${underline}${LOG_FILE_NAME}${reset}" for more info. Aborting...."
+else
+	ReportInfo "${6}"
+fi
+}
+
+
 ###
 ### Verify if directory exists
 ###
 
 VerifyDirectory(){
-        if [ ! -d ${1} ]
+	fullpath=`dirname ${1}`
+        if [ ! -d ${fullpath} ]
         then
-		ReportInfo "Verifying file and directory $1"
-                ReportError "RERR-002" "Directory \"${bell}${bold}${underline}${1}${reset}\" not found or invalid. Aborting...."
+                ReportError "RERR-002" "Directory \"${bell}${bold}${underline}${fullpath}${reset}\" not found or invalid. Aborting...."
+	
+	elif [ ! -f ${1} ]
+	then
+		ReportError "RERR-005" "File \"${bell}${bold}${underline}${1}${reset}\" not found or invalid. Aborting...."
+	
+	else
+		ReportInfo "Checking Directory and file status..... passed."
 	fi
+}
+
+
+###
+### Shutdown database instance
+###
+
+ShutdownDB(){
+case ${2} in
+    I|i )
+        $1/bin/sqlplus -s /nolog <<EOF
+        set pagesize 0 feedback off verify off echo off;
+        connect / as sysdba
+        shutdown immediate;
+EOF
+        ;;
+
+        A|a )
+        $1/bin/sqlplus -s /nolog <<EOF
+        set pagesize 0 feedback off verify off echo off;
+        connect / as sysdba
+        shutdown abort;
+EOF
+        ;;
+
+    * )
+        ReportInfo "Shutdown of instance skipped......."
+    ;;
+esac
+
 }
 
 ###
@@ -87,6 +145,116 @@ CheckVars(){
 	else
 		return 0;
 	fi
+}
+
+###
+### Function to restore spfile
+###
+RestoreSpfile(){
+
+echo "Spfile restore option...."
+echo "Y - For restroing spfile from backup by script"
+echo "N - For skipping spfile restore..............."
+printf "Select your choice : "
+
+read -r spfilechoice
+
+case ${spfilechoice} in
+    y|Y )
+    ReportInfo "Restoring spfile from backupset......."
+	
+	printf 'Please provide Full path for spfile backup location : '
+	read -r ORASPFILE_PATH
+	VerifyDirectory $ORASPFILE_PATH
+
+        #$ORACLE_HOME/bin/rman target / nocatalog log = $LOG_FILE_NAME append << EOF
+        $ORACLE_HOME/bin/rman target / nocatalog log=$LOG_FILE_NAME append << EOF
+        run
+        {
+        startup nomount force;
+        set DBID=${ORACLE_DBID}
+        restore spfile from '${ORASPFILE_PATH}';     
+        }
+EOF
+
+echo ""
+VerifyError $LOG_FILE_NAME "RMAN-" 1 "006" "Restore of Spfile Failed." "Restore of Spfile Successed."
+	;;
+
+    * )
+        ReportInfo "Restoring spfile skipped......."
+    ;;
+esac
+echo ""
+
+}
+
+###
+### Function to restore controlfiles
+###
+RestoreControlfile(){
+
+echo "Controlfile restore option...."
+echo "Y - For restroing controlfile from backup by script"
+echo "N - For skipping spfile restore..............."
+printf "Select your choice : "
+
+read -r controlchoice
+
+case ${controlchoice} in
+    y|Y )
+    ReportInfo "Restoring controlfile from backupset......."
+
+	#
+	# Clearing logfile....
+	#
+	> $LOG_FILE_NAME
+        
+	#$ORACLE_HOME/bin/rman target / nocatalog log = $LOG_FILE_NAME append << EOF
+        $ORACLE_HOME/bin/rman target / nocatalog log = $LOG_FILE_NAME append <<EOF
+        run
+        {
+        startup nomount force;
+        set DBID=${ORACLE_DBID}
+        restore controlfile from '${1}';     
+        }
+EOF
+        ;;
+
+    * )
+        ReportInfo "Restoring spfile skipped......."
+    ;;
+esac
+
+
+}
+
+###
+### Change Controlfile directory
+###
+ChanageControlfileDir(){
+
+echo "Control file directory change...."
+echo "Y - For changing controlfile location before restore by script"
+echo "N - For skipping location change..............."
+echo "If you choose Y all controlfiles are mappled to only one location specified by user.."
+printf "Select your choice : "
+
+read -r controldirchoice
+
+case ${controldirchoice} in
+    y|Y )
+	ReportInfo "Changing controlfile location......."
+	printf "Please provide the absolute directory path : "
+	read -r controldir
+	VerifyDirectory $controldir	
+        ;;
+
+    * )
+        ReportInfo "Changing controlfile location skipped ......."
+    ;;  
+esac
+
 }
 
 ###
@@ -121,7 +289,11 @@ sleep 1;
 ### Restore pfile / Spfile
 ###
 
-printf 'Please provide Full path for spfile backup location : '
-read -r ORASPFILE_PATH
+#printf 'Please provide Full path for spfile backup location : '
+#read -r ORASPFILE_PATH
 
-VerifyDirectory $ORASPFILE_PATH
+#VerifyDirectory $ORASPFILE_PATH
+
+RestoreSpfile
+
+ChanageControlfileDir
