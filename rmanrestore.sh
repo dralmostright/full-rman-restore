@@ -4,22 +4,61 @@
 ### GLOBAL VARIABLES
 ###
 
-ORACLE_HOME="/u01/app/oracle/product/11.2.0/dbhome_1"
-ORACLE_SID="testogg"
+##
+## Some oracle mandetory env's
+##
+ORACLE_HOME="/u01/app/oracle/product/11.2.0/db_home1"
+ORACLE_SID="testorcl"
 ORACLE_UNQNAME=""
 ORACLE_HOST=""
 ORACLE_OWNER=""
+
+##
+## Current user executing the script
+##
 RESTORE_USER=`whoami`
+
+##
+## Env for pointing the backup base location
+##
 BACKUP_DIR=""
-CURSCRIPT=`realpath $0`
+
+##
+## Env for locating full path of the script being executed
+##
+#CURSCRIPT=`realpath $0`
+CURSCRIPT=`readlink -f $0`
+
+##
+##
+##
 ORACLE_VERSION=""
 ORASPFILE_PATH=""
 ORACONTROLBKP_PATH=""
 ORACLE_DBID="506461997"
+
+##
+## Variables for holding database physical files
+##
+DBDATAFILES=""
+DBLOGFILES=""
+DBTEMPFILES=""
+
+##
+## Variables for generating logfiles 
+##
 DATE_AND_TIME=`date +%d_%m_%Y`
 LOG_FILE_NAME=`dirname ${CURSCRIPT}`/Sessionrestore_${DATE_AND_TIME}.log
 
-
+##
+## Variables holding O/S physical directories
+##
+ORADATADIRS=""
+ORALOGDIRS=""
+ORATEMPDIRS=""
+ORADATADIRSMAP=""
+ORALOGDIRSMAP=""
+ORATEMPDIRSMAP=""
 
 ##
 ## For Warning and Text manupulation
@@ -56,6 +95,18 @@ ReportInfo(){
        echo -e "INFO : $1 "
        echo "########################################################"
 }
+
+###
+### Print contents in an array
+###
+printArray(){
+temparr=("$@")
+for i in "${temparr[@]}"
+	do :
+	echo ${bold}${underline}$i${reset} 
+	done
+}
+
 
 ###
 ### If file exixts remove the file
@@ -108,10 +159,10 @@ VerifyDirectory(){
 ###
 
 VerifyDirectoryOnly(){
-fullpath=`dirname ${1}`
-        if [ ! -d ${fullpath} ]
+#fullpath=`dirname ${1}`
+        if [ ! -d ${1} ]
         then
-                ReportError "RERR-002" "Directory \"${bell}${bold}${underline}${fullpath}${reset}\" not found or invalid. Aborting...."
+                ReportError "RERR-002" "Directory \"${bell}${bold}${underline}${1}${reset}\" not found or invalid. Aborting...."
 
         else
                 ReportInfo "Checking Directory status..... passed."
@@ -120,6 +171,61 @@ fullpath=`dirname ${1}`
 }
 
 
+###
+### Create linked arrays with respective dirs
+###
+MapDirArray(){
+	tempvar=""
+	if [ "${1}" = "D" ]
+	then
+		ReportInfo "Mapping Directories for Datafiles......"
+		for i in "${ORADATADIRS[@]}"
+        		do :
+        		printf "Echo the map dir for ${bold}${underline}$i${reset} : "
+			read -r tempvar
+			VerifyDirectoryOnly $tempvar
+			#
+			# replace the occurance of user input with matching string
+			#
+			DBDATAFILES=`echo $DBDATAFILES | sed -e "s|$i|$tempvar|g"`
+        		done
+		#echo $DBDATAFILES
+
+	elif [ "${1}" = "L" ]
+	then
+		ReportInfo "Mapping Directories for Logfiles......"
+                for i in "${ORALOGDIRS[@]}"
+                        do :
+                        printf "Echo the map dir for ${bold}${underline}$i${reset} : "
+                        read -r tempvar
+			VerifyDirectoryOnly $tempvar
+                        #
+                        # replace the occurance of user input with matching string
+                        #
+			DBLOGFILES=`echo $DBLOGFILES | sed -e "s|$i|$tempvar|g"`
+                        done
+		#echo $DBLOGFILES
+		
+	elif [ "${1}" = "T" ]
+	then
+		ReportInfo "Mapping Directories for Tempfiles......"
+                for i in "${ORATEMPDIRS[@]}"
+                        do :
+                        printf "Echo the map dir for ${bold}${underline}$i${reset} : "
+                        read -r tempvar
+			VerifyDirectoryOnly $tempvar
+                        #
+                        # replace the occurance of user input with matching string
+                        #
+			DBTEMPFILES=`echo $DBTEMPFILES | sed -e "s|$i|$tempvar|g"`
+                        done
+		#echo $DBTEMPFILES
+
+	else
+		ReportError "RERR-009" "${bell}${bold}${underline}Invalid Mapping Choice${reset}. Aborting...."
+	fi		
+
+}
 
 ###
 ### Shutdown database instance
@@ -147,6 +253,14 @@ EOF
         ReportInfo "Shutdown of instance skipped......."
     ;;
 esac
+
+}
+
+###
+### Remap values in arrray
+###
+RemapValuesArray(){
+echo "hello"
 
 }
 
@@ -180,7 +294,7 @@ EOF
         ;;
 
     * )
-        ReportInfo "Shutdown of instance skipped......."
+        ReportInfo "Startup of instance skipped......."
     ;;
 esac
 
@@ -334,12 +448,6 @@ case ${controlchoice} in
         ClearFile $LOG_FILE_NAME
         VerifyDirectory $ORACONTROLBKP_PATH
 	
-	#
-	# Clearing logfile....
-	#
-	#> $LOG_FILE_NAME
-        
-	#$ORACLE_HOME/bin/rman target / nocatalog log = $LOG_FILE_NAME append << EOF
         $ORACLE_HOME/bin/rman target / nocatalog log = $LOG_FILE_NAME append <<EOF
         run
         {
@@ -365,12 +473,93 @@ esac
 
 }
 
+
+###
+### Generate setnew name scripts.
+###
+GenerateSetNewName(){
+
+#
+# Get the details of original datafiles
+#
+DBDATAFILES=$($1/bin/sqlplus -s /nolog <<END
+set pagesize 0 feedback off verify off echo off;
+connect / as sysdba
+select name from v\$datafile;
+END
+)
+
+#
+# Get the details of the original logfiles
+#
+DBLOGFILES=$($1/bin/sqlplus -s /nolog <<END
+set pagesize 0 feedback off verify off echo off;
+connect / as sysdba
+select member from v\$logfile;
+END
+)
+
+#
+# Get the details of the original tempfiles
+#
+DBTEMPFILES=$($1/bin/sqlplus -s /nolog <<END
+set pagesize 0 feedback off verify off echo off;
+connect / as sysdba
+select name from v\$tempfile;
+END
+)
+
+#
+# Extract only unique directories from datafiles, logfiles and tempfiles
+# 
+ORADATADIRS=(`echo -e "$DBDATAFILES" | sed -e 's/\/[^\/]*$//'|uniq`)
+#ORADATADIRS=(`echo "$DBDATAFILES" | sed -e 's/\/[^\/]*$//'`)
+ORALOGDIRS=(`echo "$DBLOGFILES" | sed -e 's/\/[^\/]*$//'|uniq`)
+#ORALOGDIRS=(`echo "$DBLOGFILES" | sed -e 's/\/[^\/]*$//'`)
+ORATEMPDIRS=(`echo "$DBTEMPFILES" | sed -e 's/\/[^\/]*$//'|uniq`)
+#ORATEMPDIRS=(`echo "$DBTEMPFILES" | sed -e 's/\/[^\/]*$//'`)
+ReportInfo "Original Unique Directories found for datafiles......."
+printArray "${ORADATADIRS[@]}"
+sleep 1;
+echo ""
+ReportInfo "Original Unique Directories found for logfiles......."
+printArray "${ORALOGDIRS[@]}"
+sleep 1;
+echo ""
+ReportInfo "Original Unique Directories found for tempfiles......."
+printArray "${ORATEMPDIRS[@]}"
+MapDirArray "D"
+MapDirArray "L"
+MapDirArray "T"
+}
+
 ###
 ### Restore the datafiles...
 ###
 RestoreDatafile(){
+ReportInfo "Restoring Datafiles........"
+echo "Do you want to change the location of datafiles...."
+echo "Y - For changing by script during restore"
+echo "N - For skipping datafile location change during restore..............."
+printf "Select your choice : "
+read -r DATAFILE_LOC
+
+case ${DATAFILE_LOC} in
+    y|Y )
+        ReportInfo "Generating Scripts for datafile location change......."
+        #printf "Please provide the absolute directory path : "
+        #read -r DATAFILEDIR
+        #VerifyDirectoryOnly $DATAFILEDIR
+	GenerateSetNewName $ORACLE_HOME
+        ;;
+
+    * )
+        ReportInfo "Changing controlfile location skipped ......."
+    	;;
+esac
 
 }
+
 
 ###
 ### Clear the weeds in screen..
@@ -404,10 +593,14 @@ sleep 1;
 ### Restore pfile / Spfile
 ###
 
-#printf 'Please provide Full path for spfile backup location : '
-#read -r ORASPFILE_PATH
-
-#VerifyDirectory $ORASPFILE_PATH
-
 RestoreSpfile
+
+###
+### Restore Controlfiles
+###
 RestoreControlfile
+
+###
+### Restore datafiles
+###
+RestoreDatafile
