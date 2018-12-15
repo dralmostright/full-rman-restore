@@ -134,6 +134,15 @@ else
 fi
 }
 
+###
+### Clean the user input as /home/oracle/ to /home/oracle 
+### /home/oracle inputs alike pattern is returned unaltered
+###
+ProcessDirs(){
+holddir=`echo ${1} | sed 's/\/$//'`
+echo $holddir
+}
+
 
 ###
 ### Verify if directory/file exists
@@ -172,6 +181,48 @@ VerifyDirectoryOnly(){
 
 
 ###
+### Mapfiles
+###
+MapDataFiles(){
+TEMPFILES=$($ORACLE_HOME/bin/sqlplus -s /nolog <<END
+set pagesize 0 feedback off verify off echo off;
+set lines 200
+connect / as sysdba
+SELECT 'set newname for datafile '||file#||' to '''||REPLACE(name,'$1','$2')||''';' from v\$datafile where name like '${1}%' order by file# ;
+END
+)
+DBDATAFILES="${DBDATAFILES} ${TEMPFILES}"
+}
+
+###
+###
+###
+MapLogFiles(){
+TEMPFILES=$($ORACLE_HOME/bin/sqlplus -s /nolog <<END
+set pagesize 0 feedback off verify off echo off;
+set lines 200
+connect / as sysdba
+select 'SQL "ALTER DATABASE RENAME FILE '''||member||''' TO '''||REPLACE(member,'${1}','${2}')||''' ";' from v$logfile where member like '${1}%';
+END
+)
+DBLOGFILES="${DBLOGFILES} ${TEMPFILES}"
+}
+
+###
+###
+###
+MapTempFiles(){
+TEMPFILES=$($ORACLE_HOME/bin/sqlplus -s /nolog <<END
+set pagesize 0 feedback off verify off echo off;
+set lines 200
+connect / as sysdba
+SELECT 'set newname for tempfile '||file#||' to '''||REPLACE(name,'$1','$2')||''';' from v\$tempfile where name like '${1}%' order by file# ;
+END
+)
+DBTEMPFILES="${DBTEMPFILES} ${TEMPFILES}"
+}
+
+###
 ### Create linked arrays with respective dirs
 ###
 MapDirArray(){
@@ -183,13 +234,15 @@ MapDirArray(){
         		do :
         		printf "Echo the map dir for ${bold}${underline}$i${reset} : "
 			read -r tempvar
+			tempvar=`ProcessDirs ${tempvar}`
 			VerifyDirectoryOnly $tempvar
 			#
 			# replace the occurance of user input with matching string
 			#
-			DBDATAFILES=`echo $DBDATAFILES | sed -e "s|$i|$tempvar|g"`
+			unset DBDATAFILES
+			MapDataFiles $i $tempvar
         		done
-		#echo $DBDATAFILES
+		echo $DBDATAFILES
 
 	elif [ "${1}" = "L" ]
 	then
@@ -198,13 +251,15 @@ MapDirArray(){
                         do :
                         printf "Echo the map dir for ${bold}${underline}$i${reset} : "
                         read -r tempvar
+			tempvar=`ProcessDirs ${tempvar}`
 			VerifyDirectoryOnly $tempvar
                         #
                         # replace the occurance of user input with matching string
                         #
-			DBLOGFILES=`echo $DBLOGFILES | sed -e "s|$i|$tempvar|g"`
-                        done
-		#echo $DBLOGFILES
+			unset DBLOGFILES
+                        MapLogFiles $i $tempvar
+			done
+		echo $DBLOGFILES
 		
 	elif [ "${1}" = "T" ]
 	then
@@ -213,13 +268,15 @@ MapDirArray(){
                         do :
                         printf "Echo the map dir for ${bold}${underline}$i${reset} : "
                         read -r tempvar
+			tempvar=`ProcessDirs ${tempvar}`
 			VerifyDirectoryOnly $tempvar
                         #
                         # replace the occurance of user input with matching string
                         #
-			DBTEMPFILES=`echo $DBTEMPFILES | sed -e "s|$i|$tempvar|g"`
+			unset DBTEMPFILES
+			MapTempFiles $i $tempvar
                         done
-		#echo $DBTEMPFILES
+		echo $DBTEMPFILES
 
 	else
 		ReportError "RERR-009" "${bell}${bold}${underline}Invalid Mapping Choice${reset}. Aborting...."
@@ -367,6 +424,7 @@ VerifyError $LOG_FILE_NAME "RMAN-" 1 "006" "Restore of Spfile Failed." "Restore 
 	;;
 
     * )
+	echo ""
         ReportInfo "Restoring spfile skipped......."
     ;;
 esac
@@ -406,6 +464,7 @@ case ${controldirchoice} in
 	ReportInfo "Changing controlfile location......."
 	printf "Please provide the absolute directory path : "
 	read -r controldir
+	tempvar=`ProcessDirs ${controldir}`
 	VerifyDirectoryOnly $controldir	
         ReportInfo "Shutting down instance......."
 	ShutdownDB ${ORACLE_HOME} "A"
@@ -420,6 +479,7 @@ case ${controldirchoice} in
 	;;
 
     * )
+	echo ""
         ReportInfo "Changing controlfile location skipped ......."
     ;;  
 esac
@@ -466,6 +526,7 @@ EOF
         ;;
 
     * )
+	echo ""
         ReportInfo "Restoring of controlfiles skipped......."
     ;;
 esac
@@ -512,6 +573,7 @@ END
 #
 # Extract only unique directories from datafiles, logfiles and tempfiles
 # 
+#ORADATADIRS=(`echo -e "$DBDATAFILES" | sed "s/set newname for datafile//g;s/ [0-9]* / /g;s/ to //g;s/^'//g;s/\/[^\/]*$//" | uniq`)
 ORADATADIRS=(`echo -e "$DBDATAFILES" | sed -e 's/\/[^\/]*$//'|uniq`)
 #ORADATADIRS=(`echo "$DBDATAFILES" | sed -e 's/\/[^\/]*$//'`)
 ORALOGDIRS=(`echo "$DBLOGFILES" | sed -e 's/\/[^\/]*$//'|uniq`)
@@ -528,16 +590,34 @@ sleep 1;
 echo ""
 ReportInfo "Original Unique Directories found for tempfiles......."
 printArray "${ORATEMPDIRS[@]}"
+sleep 1;
+echo ""
 MapDirArray "D"
 MapDirArray "L"
 MapDirArray "T"
 }
 
 ###
+### Get the recover option i.e SCN, Archive Sequence or Time
+###
+GetRecoveryOption(){
+echo ""
+}
+
+###
+### Generate restore script
+###
+GenerateRestoreScript(){
+echo ""
+}
+
+###
 ### Restore the datafiles...
 ###
 RestoreDatafile(){
+echo ""
 ReportInfo "Restoring Datafiles........"
+echo ""
 echo "Do you want to change the location of datafiles...."
 echo "Y - For changing by script during restore"
 echo "N - For skipping datafile location change during restore..............."
@@ -547,14 +627,17 @@ read -r DATAFILE_LOC
 case ${DATAFILE_LOC} in
     y|Y )
         ReportInfo "Generating Scripts for datafile location change......."
-        #printf "Please provide the absolute directory path : "
-        #read -r DATAFILEDIR
-        #VerifyDirectoryOnly $DATAFILEDIR
 	GenerateSetNewName $ORACLE_HOME
         ;;
 
+    n|N )
+        echo ""
+        ReportInfo "Changing datafile location skipped ......."
+        ;;
+
     * )
-        ReportInfo "Changing controlfile location skipped ......."
+	echo ""
+	ReportError  "RERR-009" ${bell}${bold}${underline}${DATAFILE_LOC}${reset}" not valid choice, datafile not restored. Aborting..."
     	;;
 esac
 
@@ -571,10 +654,6 @@ clear;
 ###
 ReportInfo "Checking Fundamental Variables....."
 echo "";
-
-###
-### Pause the execution of script for one sec..
-###
 sleep 1;
 
 ###
