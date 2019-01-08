@@ -1,0 +1,76 @@
+
+Recovery Manager: Release 11.2.0.4.0 - Production on Mon Dec 17 00:45:04 2018
+
+Copyright (c) 1982, 2011, Oracle and/or its affiliates.  All rights reserved.
+
+connected to target database: ORCL (DBID=1506877569, not open)
+using target database control file instead of recovery catalog
+
+RMAN> 2> 3> 4> 5> 6> 7> 8> 9> 10> 11> 12> 13> 14> 15> 16> 17> 18> 19> 20> 21> 
+allocated channel: c1
+channel c1: SID=125 device type=DISK
+
+allocated channel: c2
+channel c2: SID=10 device type=DISK
+
+allocated channel: c3
+channel c3: SID=135 device type=DISK
+
+executing command: SET NEWNAME
+
+executing command: SET NEWNAME
+
+executing command: SET NEWNAME
+
+executing command: SET NEWNAME
+
+executing command: SET NEWNAME
+
+sql statement: ALTER DATABASE RENAME FILE ''/oradata/orcl/redo03.log'' TO ''/oradata/testorcl/redo03.log'' 
+
+sql statement: ALTER DATABASE RENAME FILE ''/oradata/orcl/redo02.log'' TO ''/oradata/testorcl/redo02.log'' 
+
+sql statement: ALTER DATABASE RENAME FILE ''/oradata/orcl/redo01.log'' TO ''/oradata/testorcl/redo01.log'' 
+
+Starting restore at 17-DEC-18
+
+channel c1: starting datafile backup set restore
+channel c1: specifying datafile(s) to restore from backup set
+channel c1: restoring datafile 00002 to /oradata/testorcl/sysaux01.dbf
+channel c1: restoring datafile 00005 to /oradata/testorcl/example01.dbf
+channel c1: reading from backup piece /archive/backup/orcl/DB_20181216.bkp/DB_BACKUPSET/DB_0btkv1hv_1_1
+channel c2: starting datafile backup set restore
+channel c2: specifying datafile(s) to restore from backup set
+channel c2: restoring datafile 00001 to /oradata/testorcl/system01.dbf
+channel c2: restoring datafile 00003 to /oradata/testorcl/undotbs01.dbf
+channel c2: restoring datafile 00004 to /oradata/testorcl/users01.dbf
+channel c2: reading from backup piece /archive/backup/orcl/DB_20181216.bkp/DB_BACKUPSET/DB_0atkv1hv_1_1
+channel c1: piece handle=/archive/backup/orcl/DB_20181216.bkp/DB_BACKUPSET/DB_0btkv1hv_1_1 tag=TAG20181216T233735
+channel c1: restored backup piece 1
+channel c1: restore complete, elapsed time: 00:00:55
+channel c2: piece handle=/archive/backup/orcl/DB_20181216.bkp/DB_BACKUPSET/DB_0atkv1hv_1_1 tag=TAG20181216T233735
+channel c2: restored backup piece 1
+channel c2: restore complete, elapsed time: 00:01:36
+Finished restore at 17-DEC-18
+
+datafile 1 switched to datafile copy
+input datafile copy RECID=9 STAMP=995071603 file name=/oradata/testorcl/system01.dbf
+datafile 2 switched to datafile copy
+input datafile copy RECID=10 STAMP=995071603 file name=/oradata/testorcl/sysaux01.dbf
+datafile 3 switched to datafile copy
+input datafile copy RECID=11 STAMP=995071603 file name=/oradata/testorcl/undotbs01.dbf
+datafile 4 switched to datafile copy
+input datafile copy RECID=12 STAMP=995071603 file name=/oradata/testorcl/users01.dbf
+datafile 5 switched to datafile copy
+input datafile copy RECID=13 STAMP=995071603 file name=/oradata/testorcl/example01.dbf
+
+
+released channel: c1
+
+released channel: c2
+
+released channel: c3
+
+RMAN> 
+
+Recovery Manager complete.

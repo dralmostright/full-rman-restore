@@ -10,7 +10,7 @@
 ORACLE_HOME="/u01/app/oracle/product/11.2.0/db_home1"
 ORACLE_SID="testorcl"
 ORACLE_UNQNAME=""
-ORACLE_HOST=""
+ORACLE_HOST=`hostname`
 ORACLE_OWNER=""
 
 ##
@@ -60,6 +60,13 @@ ORADATADIRSMAP=""
 ORALOGDIRSMAP=""
 ORATEMPDIRSMAP=""
 
+
+###
+###
+###
+RESTORESCRIPT=""
+
+
 ##
 ## For Warning and Text manupulation
 ##
@@ -90,10 +97,12 @@ ReportError(){
 ###
 
 ReportInfo(){
+       echo " "
        echo "########################################################"
        echo "Information by the script : $CURSCRIPT"
        echo -e "INFO : $1 "
        echo "########################################################"
+       echo " "
 }
 
 ###
@@ -202,7 +211,7 @@ TEMPFILES=$($ORACLE_HOME/bin/sqlplus -s /nolog <<END
 set pagesize 0 feedback off verify off echo off;
 set lines 200
 connect / as sysdba
-select 'SQL "ALTER DATABASE RENAME FILE '''||member||''' TO '''||REPLACE(member,'${1}','${2}')||''' ";' from v$logfile where member like '${1}%';
+select 'SQL "ALTER DATABASE RENAME FILE '''''||member||''''' TO '''''||REPLACE(member,'${1}','${2}')||''''' ";' from v\$logfile where member like '${1}%';
 END
 )
 DBLOGFILES="${DBLOGFILES} ${TEMPFILES}"
@@ -242,7 +251,7 @@ MapDirArray(){
 			unset DBDATAFILES
 			MapDataFiles $i $tempvar
         		done
-		echo $DBDATAFILES
+		#echo -e "$DBDATAFILES"
 
 	elif [ "${1}" = "L" ]
 	then
@@ -259,7 +268,7 @@ MapDirArray(){
 			unset DBLOGFILES
                         MapLogFiles $i $tempvar
 			done
-		echo $DBLOGFILES
+		#echo $DBLOGFILES
 		
 	elif [ "${1}" = "T" ]
 	then
@@ -276,7 +285,7 @@ MapDirArray(){
 			unset DBTEMPFILES
 			MapTempFiles $i $tempvar
                         done
-		echo $DBTEMPFILES
+		#echo $DBTEMPFILES
 
 	else
 		ReportError "RERR-009" "${bell}${bold}${underline}Invalid Mapping Choice${reset}. Aborting...."
@@ -399,16 +408,16 @@ echo "N - For skipping spfile restore..............."
 printf "Select your choice : "
 
 read -r spfilechoice
-
+echo ""
 case ${spfilechoice} in
     y|Y )
-    ReportInfo "Restoring spfile from backupset......."
-	
+    	ReportInfo "Restoring spfile from backupset......."
 	printf 'Please provide Full path for spfile backup location : '
 	read -r ORASPFILE_PATH
+	echo ""
 	ClearFile $LOG_FILE_NAME
 	VerifyDirectory $ORASPFILE_PATH
-
+	echo " "
         #$ORACLE_HOME/bin/rman target / nocatalog log = $LOG_FILE_NAME append << EOF
         $ORACLE_HOME/bin/rman target / nocatalog log=$LOG_FILE_NAME append << EOF
         run
@@ -419,12 +428,11 @@ case ${spfilechoice} in
         }
 EOF
 
-echo ""
+echo " "
 VerifyError $LOG_FILE_NAME "RMAN-" 1 "006" "Restore of Spfile Failed." "Restore of Spfile Successed."
 	;;
 
     * )
-	echo ""
         ReportInfo "Restoring spfile skipped......."
     ;;
 esac
@@ -466,7 +474,7 @@ case ${controldirchoice} in
 	read -r controldir
 	tempvar=`ProcessDirs ${controldir}`
 	VerifyDirectoryOnly $controldir	
-        ReportInfo "Shutting down instance......."
+	ReportInfo "Shutting down instance......."
 	ShutdownDB ${ORACLE_HOME} "A"
 	ReportInfo "Starting database instance in nomount mode......."
 	StartDB ${ORACLE_HOME} "N"
@@ -479,7 +487,6 @@ case ${controldirchoice} in
 	;;
 
     * )
-	echo ""
         ReportInfo "Changing controlfile location skipped ......."
     ;;  
 esac
@@ -531,6 +538,47 @@ EOF
     ;;
 esac
 
+
+}
+
+###
+###
+###
+ClearBackupInfo(){
+ReportInfo "Clearing Previous Backup information form repository........"
+$ORACLE_HOME/bin/rman target / nocatalog log = $LOG_FILE_NAME append <<EOF
+        run
+        {
+	crosscheck backup;
+	delete expired backup;
+	}
+EOF
+}
+
+###
+### Catalog backup for database
+###
+CatalogBackup(){
+ReportInfo "Option For catalog of backup.......\nY : to catalog database backupsets\nN : for skipping catalog database backupsets."
+printf "Please make your choice:"
+read -r CATALOGOPT
+
+case ${CATALOGOPT} in
+    y|Y )
+	printf "Please provide the absolute directory path for backupsets :"
+	read -r CATALOGDIR
+    	ReportInfo "Starting Catalog of database backupsets....."
+	$ORACLE_HOME/bin/rman target / nocatalog log = $LOG_FILE_NAME append <<EOF
+        run
+        {
+        catalog start with '${CATALOGDIR}' noprompt;
+        }
+EOF
+	;;
+    * )
+	ReportInfo "Catalog of database backupsets is skipped......."
+	;;
+esac
 
 }
 
@@ -608,7 +656,53 @@ echo ""
 ### Generate restore script
 ###
 GenerateRestoreScript(){
-echo ""
+case ${1} in
+    n|N )
+	echo "$ORACLE_HOME/bin/rman target / nocatalog log = $LOG_FILE_NAME append <<EOF" > restore_${DATE_AND_TIME}.sh
+	echo "run" >> restore_${DATE_AND_TIME}.sh
+	echo "{" >> restore_${DATE_AND_TIME}.sh
+	echo "ALLOCATE CHANNEL c1 DEVICE TYPE DISK;" >> restore_${DATE_AND_TIME}.sh
+	echo "ALLOCATE CHANNEL c2 DEVICE TYPE DISK;" >> restore_${DATE_AND_TIME}.sh
+	echo "ALLOCATE CHANNEL c3 DEVICE TYPE DISK;" >> restore_${DATE_AND_TIME}.sh
+	echo "$DBDATAFILES" >> restore_${DATE_AND_TIME}.sh
+	echo "$DBLOGFILES" >> restore_${DATE_AND_TIME}.sh
+	echo "$DBTEMPFILE" >> restore_${DATE_AND_TIME}.sh
+	echo "restore database;" >> restore_${DATE_AND_TIME}.sh
+	echo "SWITCH DATAFILE ALL;" >> restore_${DATE_AND_TIME}.sh
+	echo "switch tempfile all;" >> restore_${DATE_AND_TIME}.sh
+	echo "release channel c1;" >> restore_${DATE_AND_TIME}.sh
+	echo "release channel c2;" >> restore_${DATE_AND_TIME}.sh
+	echo "release channel c3;" >> restore_${DATE_AND_TIME}.sh
+	echo "}" >> restore_${DATE_AND_TIME}.sh
+	echo "exit;" >> restore_${DATE_AND_TIME}.sh
+	echo "EOF" >> restore_${DATE_AND_TIME}.sh
+        #ReportInfo "Generating Scripts for datafile location change......."
+        ;;
+
+    o|O )
+        echo ""
+        ReportInfo "Changing datafile location skipped ......."
+        echo "$ORACLE_HOME/bin/rman target / nocatalog log = $LOG_FILE_NAME append <<EOF" > restore_${DATE_AND_TIME}.sh
+        echo "run" >> restore_${DATE_AND_TIME}.sh
+        echo "{" >> restore_${DATE_AND_TIME}.sh
+        echo "ALLOCATE CHANNEL c1 DEVICE TYPE DISK;" >> restore_${DATE_AND_TIME}.sh
+        echo "ALLOCATE CHANNEL c2 DEVICE TYPE DISK;" >> restore_${DATE_AND_TIME}.sh
+        echo "ALLOCATE CHANNEL c3 DEVICE TYPE DISK;" >> restore_${DATE_AND_TIME}.sh
+        echo "restore database;" >> restore_${DATE_AND_TIME}.sh
+        echo "release channel c1;" >> restore_${DATE_AND_TIME}.sh
+        echo "release channel c2;" >> restore_${DATE_AND_TIME}.sh
+        echo "release channel c3;" >> restore_${DATE_AND_TIME}.sh
+        echo "}" >> restore_${DATE_AND_TIME}.sh
+        echo "exit;" >> restore_${DATE_AND_TIME}.sh
+        echo "EOF" >> restore_${DATE_AND_TIME}.sh
+        ;;
+
+    * )
+	echo ""
+	ReportError  "RERR-009" ${bell}${bold}${underline}${DATAFILE_LOC}${reset}" not valid choice, datafile not restored. Aborting..."
+    	;;
+esac
+
 }
 
 ###
@@ -628,6 +722,16 @@ case ${DATAFILE_LOC} in
     y|Y )
         ReportInfo "Generating Scripts for datafile location change......."
 	GenerateSetNewName $ORACLE_HOME
+	GenerateRestoreScript "n"
+	chmod +x restore_${DATE_AND_TIME}.sh
+	ReportInfo "Deleting obsolete/expired backups ......."
+	ClearBackupInfo
+	CatalogBackup
+	ClearFile $LOG_FILE_NAME	
+	ReportInfo "Restoring database.......\nPlease view logfile : $LOG_FILE_NAME for more info"
+	nohup ./restore_${DATE_AND_TIME}.sh > /dev/null &
+	JOBID=$!
+	ReportInfo "Process ID for the restore JOB is : $JOBID"
         ;;
 
     n|N )
@@ -683,3 +787,5 @@ RestoreControlfile
 ### Restore datafiles
 ###
 RestoreDatafile
+
+
